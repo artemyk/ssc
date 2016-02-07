@@ -103,6 +103,10 @@ else:
 
 
 print "# Running %s network: %s" % (args.NET, str(c))
+
+row_format ="{:>10}{:>7}{:>7}{:>7}{:>6}{:>15.5}{:>15.5}{:>8.4}"
+print row_format.format("Network", "Alpha", "R", "PertId", "t", "Eff", "Damage", "RunT")
+
 np.set_printoptions(precision=3)
 
 init_time = time.time()
@@ -119,11 +123,6 @@ capacities = args.alpha * heterogeneity_q * loadings
 edgesources = np.array([int(e.source()) for e in c.G.edges()]) 
 edgetargets = np.array([int(e.target()) for e in c.G.edges()]) 
 edge_ones   = np.ones(len(edgetargets))
-
-row_format ="{:>10}{:>7}{:>7}{:>7}{:>6}{:>15.5}{:>15.5}{:>8.4}"
-print row_format.format("Network", "Alpha", "R", "PertId", "t", "Eff", "Damage", "RunT")
-#for team, row in zip(teams_list, data):
-#    print row_format.format(team, *row)
 
 init_efficiency = c.get_efficiency(dists)
 run_time = time.time() - init_time
