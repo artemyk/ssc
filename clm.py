@@ -65,7 +65,7 @@ class CLMLoadingsGensVsLoads(CLMLoadings):
 
     def get_loadings(self, dists):
         # Convert from graph-tool to networkx format
-        mx = graph_tool.spectral.adjacency(G, weight=dists).T
+        mx = graph_tool.spectral.adjacency(self.G, weight=dists).T
         nxG = nx.from_scipy_sparse_matrix(mx, create_using=nx.Graph())
 
         cnts = np.zeros(self.N)
@@ -91,6 +91,7 @@ if args.NET == 'ieee300':
     for s, e in edgelist:
         G.add_edge(verts[s],verts[e])
     c = CLMLoadingsGensVsLoads(G, d['bus'][:,1]==2)
+    del G
     
 elif args.NET == 'western':
     c = CLMLoadings(graph_tool.collection.data["power"])
