@@ -1,9 +1,17 @@
-import networkx as nx
 import numpy as np
+import networkx as nx
 
 import argparse
 import logging
 import time
+
+try:
+    import graph_tool
+    import graph_tool.centrality
+    import graph_tool.stats
+    import graph_tool.spectral
+except ImportError:
+    print "# graph_tool not found"
 
 logger = logging.getLogger()
 
@@ -37,31 +45,51 @@ class gBase(object):
             mx = mx[self.is_generator_bus,:][:,~self.is_generator_bus]
         return np.nanmean(mx)
 
+    def _init_edges(self, edgelist):
+        self.num_edges = len(edgelist)
+        self.edgesources = np.array([e[0] for e in edgelist]) 
+        self.edgetargets = np.array([e[1] for e in edgelist]) 
+        self._edge_ixs = {}
+        for ndx, e in enumerate(edgelist):
+            self._edge_ixs[e] = ndx
+            self._edge_ixs[(e[1],e[0])] = ndx
+
         
 class gtGraph(gBase):
     def __init__(self, graph, is_generator_bus=None):
-        if is_generator_bus is not None:
-            raise Exception('is_generator_bus not supported')
-        import graph_tool
-        import graph_tool.centrality
-        import graph_tool.stats
+        #if is_generator_bus is not None:
+        #    raise Exception('is_generator_bus not supported')
         self.graph = graph
         self.N = graph.num_vertices()
-        self.num_edges = graph.num_edges()
-        self.edgesources = np.array([int(e.source()) for e in graph.edges()]) 
-        self.edgetargets = np.array([int(e.target()) for e in graph.edges()]) 
-        self._edge_ixs = {e:ndx for ndx, e in enumerate(graph.edges())}
+        edgelist = [(int(e.source()), int(e.target())) for e in graph.edges()]
+        self._init_edges(edgelist)
         self.is_generator_bus = is_generator_bus
+        if is_generator_bus is not None:
+            self.gn_set      = np.flatnonzero(is_generator_bus)
+            self.gn_set_ndx  = { vid:ndx for ndx, vid in enumerate(self.gn_set)}
+            self.ld_set      = np.flatnonzero(~is_generator_bus)
+            self.ld_set_ndx  = { vid:ndx for ndx, vid in enumerate(self.ld_set)}
+            self.gn_subgraph = graph_tool.Graph()
+            self.ld_subgraph = graph_tool.Graph()
+            verts1 = list(self.gn_subgraph.add_vertex(len(self.gn_set)))
+            verts2 = list(self.ld_subgraph.add_vertex(len(self.ld_set)))
+            for e in edgelist:
+                if e[0] in self.gn_set and e[1] in self.gn_set:
+                    self.gn_subgraph.add_edge(verts1[self.gn_set_ndx[e[0]]],verts1[self.gn_set_ndx[e[1]]])
+                if e[0] in self.ld_set and e[1] in self.ld_set:
+                    self.ld_subgraph.add_edge(verts2[self.ld_set_ndx[e[0]]],verts2[self.ld_set_ndx[e[1]]])
+
+
 
     @classmethod
     def construct(cls, N, edgelist, is_generator_bus=None):
-        if is_generator_bus is not None:
-            raise Exception('is_generator_bus not supported')
+        #if is_generator_bus is not None:
+        #    raise Exception('is_generator_bus not supported')
         graph = graph_tool.Graph(directed=False)
         verts = list(graph.add_vertex(len(bus_idmap)))
         for s, e in edgelist:
             graph.add_edge(verts[s],verts[e])
-        return cls(graph)
+        return cls(graph, is_generator_bus)
 
     def avg_degree(self):
         return graph_tool.stats.vertex_average(self.graph, 'total')[0]
@@ -72,31 +100,34 @@ class gtGraph(gBase):
 
     def get_loadings(self, dists):
         vprop, _ =graph_tool.centrality.betweenness(self.graph, weight=self.graph.new_ep('float', vals=dists), norm=False)
-        return vprop.a
+        ret = vprop.a
+        if self.is_generator_bus is not None:
+            vpropG, _ =graph_tool.centrality.betweenness(self.gn_subgraph, weight=self.graph.new_ep('float', vals=dists[self.gn_set]), norm=False)
+            ret[self.is_generator_bus] -= vpropG.a
+            vpropL, _ =graph_tool.centrality.betweenness(self.ld_subgraph, weight=self.graph.new_ep('float', vals=dists[self.ld_set]), norm=False)
+            ret[~self.is_generator_bus] -= vpropL.a
+        return ret
 
     def toNx(self):
-        import graph_tool.spectral
         # Convert from graph-tool to networkx format
         mx = graph_tool.spectral.adjacency(self.graph).T
         nxG = nx.from_scipy_sparse_matrix(mx, create_using=nx.Graph())
         return nxG
 
-    def neighbors(self, node):
+    def neighbor_edges(self, node):
         v = self.graph.vertex(node)
-        return [int(e.source() if e.source() != node else e.target()) for e in v.all_edges()]
+        return [self._edge_ixs[(int(e.source()),int(e.target()))] for e in v.all_edges()]
 
 
 class nxGraph(gBase):
     def __init__(self, graph, is_generator_bus=None):
         self.graph = graph
         self.N = len(graph)
-        self.num_edges = graph.number_of_edges()
         self.is_generator_bus = is_generator_bus
         if is_generator_bus is not None:
-            self.is_gen_set       = np.flatnonzero(is_generator_bus)
-            self.is_not_gen_set   = np.flatnonzero(~is_generator_bus)
-        self.edgesources = np.array([e[0] for e in graph.edges()]) 
-        self.edgetargets = np.array([e[1] for e in graph.edges()]) 
+            self.gn_set   = np.flatnonzero(is_generator_bus)
+            self.ld_set   = np.flatnonzero(~is_generator_bus)
+        self._init_edges(graph.edges())
 
     @classmethod
     def construct(cls, N, edgelist, is_generator_bus=None):
@@ -122,15 +153,65 @@ class nxGraph(gBase):
         nx.set_edge_attributes(self.graph, 'weight', dict(zip(self.graph.edges(), dists)))
         if self.is_generator_bus is not None:
             d=nx.centrality.betweenness_centrality_subset(self.graph, weight='weight', 
-                sources=self.is_gen_set, targets=self.is_not_gen_set)
+                sources=self.gn_set, targets=self.ld_set)
         else:
-            d=nx.centrality.betweenness_centrality(self.graph, weight='weight', normalized=False)
+            d=nx.centrality.betweenness_centrality(self.graph, 
+                weight='weight', normalized=False)
         ixs, vals = map(list, zip(*d.iteritems()))
         cnts[ixs] = vals
         return cnts        
 
-    def neighbors(self, node):
-        return self.graph.neighbors(node)
+    def neighbor_edges(self, node):
+        return [self._edge_ixs[(node,n)] for n in self.graph.neighbors(node)]
+
+
+
+class igGraph(gBase): # igraph
+    def __init__(self, graph, is_generator_bus=None):
+        self.graph = graph
+        self.N = len(graph)
+        self.is_generator_bus = is_generator_bus
+        if is_generator_bus is not None:
+            self.gn_set   = np.flatnonzero(is_generator_bus)
+            self.ld_set   = np.flatnonzero(~is_generator_bus)
+        self._init_edges(graph.edges())
+
+    @classmethod
+    def construct(cls, N, edgelist, is_generator_bus=None):
+        graph = nx.Graph()
+        graph.add_nodes_from(range(N))
+        graph.add_edges_from(edgelist)
+        return cls(graph, is_generator_bus)
+
+    def avg_degree(self):
+        return np.mean(nx.degree(self.graph).values())
+
+    def shortest_paths(self, dists):
+        mx = np.inf * np.ones((self.N, self.N))
+        nx.set_edge_attributes(self.graph, 'weight', dict(zip(self.graph.edges(), dists)))
+        d = nx.shortest_path_length(self.graph, weight='weight')
+        for i, v in d.iteritems():
+            mx[i, v.keys()] = v.values()
+        return mx
+
+    def get_loadings(self, dists):
+        cnts = np.zeros(self.N)
+        args = {}
+        nx.set_edge_attributes(self.graph, 'weight', dict(zip(self.graph.edges(), dists)))
+        if self.is_generator_bus is not None:
+            d=nx.centrality.betweenness_centrality_subset(self.graph, weight='weight', 
+                sources=self.gn_set, targets=self.ld_set)
+        else:
+            d=nx.centrality.betweenness_centrality(self.graph, 
+                weight='weight', normalized=False)
+        ixs, vals = map(list, zip(*d.iteritems()))
+        cnts[ixs] = vals
+        return cnts        
+
+    def neighbor_edges(self, node):
+        return [self._edge_ixs[(node,n)] for n in self.graph.neighbors(node)]
+
+
 
 """
 class CLMLoadings(object):
@@ -152,8 +233,8 @@ class CLMLoadingsGensVsLoads(CLMLoadings):
     # generator and load buses
     def __init__(self, G, is_generator_bus):
         self.is_generator_bus = is_generator_bus
-        self.is_gen_set       = np.flatnonzero(is_generator_bus)
-        self.is_not_gen_set   = np.flatnonzero(~is_generator_bus)
+        self.gn_set       = np.flatnonzero(is_generator_bus)
+        self.ld_set   = np.flatnonzero(~is_generator_bus)
         super(CLMLoadingsGensVsLoads,self).__init__(G)
 
     def get_loadings(self, dists):
@@ -163,7 +244,7 @@ class CLMLoadingsGensVsLoads(CLMLoadings):
 
         cnts = np.zeros(self.N)
         d=nx.centrality.betweenness_centrality_subset(nxG, 
-            sources=self.is_gen_set, targets=self.is_not_gen_set, weight='weight')
+            sources=self.gn_set, targets=self.ld_set, weight='weight')
         ixs, vals = map(list, zip(*d.iteritems()))
         cnts[ixs] = vals
         return cnts
@@ -173,15 +254,13 @@ class CLMLoadingsGensVsLoads(CLMLoadings):
         return (1./mx[self.is_generator_bus,:][:,~self.is_generator_bus]).mean()
 """
 
-is_generator_bus = None
 if args.NET == 'ieee300':
     from pypower import case300
     d=case300.case300()
     bus_idmap = { busid : ix for ix, busid in enumerate(d['bus'][:,0].astype('int')) }
     edgelist = [(bus_idmap[s], bus_idmap[e]) for s, e in d['branch'][:,0:2].astype('int')]
-    G = nxGraph.construct(len(bus_idmap), edgelist)
-    is_generator_bus = (d['bus'][:,1]==2)
-    #modelcls = CLMLoadingsGensVsLoads
+    cls = nxGraph if args.engine == 'networkx' else gtGraph
+    G = cls.construct(len(bus_idmap), edgelist, d['bus'][:,1]==2)
     
 else:
     import graph_tool.collection
@@ -192,21 +271,20 @@ else:
     else:
         raise Exception("Dont know how to load network %s"%args.NET)
 
-    #G = 
     if args.engine == 'networkx':
         G=nxGraph(G.toNx())
-    #modelcls = CLMLoadings
+
 
 print "# Running %s network: %s / %s" % (args.NET, str(G), G.__class__.__name__)
 
 def print_row(net, alpha, r, pertid, t, eff, damage, runtime):
-    row_format ="{:>10}{:>7}{:>7}{:>7}{:>6}{:>15}{:>15}{:>8}"
+    row_format ="{:>10}{:>7}{:>7}{:>7}{:>6}{:>15}{:>15}{:>9}"
     if type(eff) is not str:
         eff = '%0.5f'% eff
     if type(damage) is not str:
         damage = '%0.5f'% damage
     if type(runtime) is not str:
-        runtime = '%0.5f'% runtime
+        runtime = '%0.3f'% runtime
     print row_format.format(net, alpha, r, pertid, t, eff, damage, runtime)
 
 print_row("Network", "Alpha", "R", "PertId", "t", "Eff", "Damage", "RunT")
@@ -241,8 +319,8 @@ for ndx in range(args.num_perts):
     c_init_effs = init_effs.copy()
 
     cutnode = np.random.randint(G.N)
-    print "# Cutting nodes", G.neighbors(cutnode)
-    c_init_effs[G.neighbors(cutnode)] = 0.0
+    #print "# Cutting edges", G.neighbor_edges(cutnode)
+    c_init_effs[G.neighbor_edges(cutnode)] = 0.0
             
     c_effs = c_init_effs.copy()
 
@@ -250,6 +328,7 @@ for ndx in range(args.num_perts):
         iter_init_time = time.time()
         dists = 1.0/(c_effs + NONZEROEPS)
         loadings = G.get_loadings(dists)
+        print 'loadings:', np.sort(loadings)[-1:-20:-1]
 
         mult = np.ones(G.num_edges)
         ixs1 = loadings[G.edgesources]>capacities[G.edgesources]
@@ -257,7 +336,6 @@ for ndx in range(args.num_perts):
         mult[ixs1] = capacities[G.edgesources][ixs1]/loadings[G.edgesources][ixs1]
         mult[ixs2] = np.minimum(mult[ixs2], capacities[G.edgetargets][ixs2]/loadings[G.edgetargets][ixs2])
         c_effs = np.multiply(c_init_effs, mult)
-
         cur_efficiency = G.get_efficiency(dists)
         iter_time = time.time() - iter_init_time
         cur_damage = (init_efficiency-cur_efficiency)/init_efficiency
