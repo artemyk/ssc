@@ -5,7 +5,7 @@ import argparse
 import logging
 import time
 
-import igraph
+# import igraph
 
 try:
     import graph_tool
