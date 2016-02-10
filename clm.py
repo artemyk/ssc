@@ -27,7 +27,7 @@ parser.add_argument('--r', type=float, help="Heterogenenity of loads", default=0
 parser.add_argument('--num_iters', type=int, help="Number of cascade iterations to perform", default=15)
 parser.add_argument('--num_perts', type=int, help="Number of initial perturbations to sample", default=10)
 parser.add_argument('--rndseed', type=int, help="Random seed") 
-parser.add_argument('--engine', type=str, help='Which network package to use', choices=['graphtool','networkx','igraph'], default='networkx')
+parser.add_argument('--engine', type=str, help='Which network package to use', choices=['graphtool','networkx','igraph'], default='graphtool')
 
 #parser.add_argument('--debug', help='Output debugging information', action='store_true')
 args = parser.parse_args()
