@@ -214,8 +214,9 @@ else:
 
 
 print "# Running %s network: %s / %s / load_time=%0.3f" % (args.NET, str(G), G.__class__.__name__, time.time() - init_time)
+print "# Edgelist:", str(G.get_edgelist())
 
-def print_row(net, alpha, r, pertid, t, eff, damage, runtime):
+def print_row(net, alpha, r, pertid, t, eff, damage, runtime, effs):
     row_format ="{:>10} |{:>7} |{:>7} |{:>7} |{:>6} |{:>12} |{:>12} |{:>9}"
     if type(eff) is not str:
         eff = '%0.5f'% eff
@@ -223,9 +224,9 @@ def print_row(net, alpha, r, pertid, t, eff, damage, runtime):
         damage = '%0.5f'% damage
     if type(runtime) is not str:
         runtime = '%0.3f'% runtime
-    print row_format.format(net, alpha, r, pertid, t, eff, damage, runtime)
+    print row_format.format(net, alpha, r, pertid, t, eff, damage, runtime) + " |" + effs
 
-print_row("Network", "Alpha", "R", "PertId", "t", "Eff", "Damage", "RunT")
+print_row("Network", "Alpha", "R", "PertId", "t", "Eff", "Damage", "RunT", "Effs")
 np.set_printoptions(precision=3)
 
 diag = np.eye(G.N).astype('bool')
@@ -249,7 +250,7 @@ capacities = args.alpha * heterogeneity_q * loadings
 init_efficiency = G.get_efficiency(dists)
 run_time = time.time() - init_time
 
-print_row(args.NET, args.alpha, args.r, -1, 0, init_efficiency, 0.0, run_time)
+print_row(args.NET, args.alpha, args.r, -1, 0, init_efficiency, 0.0, run_time, np.array_str(init_effs))
 
 for ndx in range(args.num_perts):
     c_init_effs = init_effs.copy()
@@ -271,10 +272,10 @@ for ndx in range(args.num_perts):
         ixs2 = loadings[G.edgetargets]>capacities[G.edgetargets]
         mult[ixs1] = capacities[G.edgesources][ixs1]/loadings[G.edgesources][ixs1]
         mult[ixs2] = np.minimum(mult[ixs2], capacities[G.edgetargets][ixs2]/loadings[G.edgetargets][ixs2])
-        c_effs = np.multiply(c_init_effs, mult)
         cur_efficiency = G.get_efficiency(dists)
         iter_time = time.time() - iter_init_time
         cur_damage = (init_efficiency-cur_efficiency)/init_efficiency
-        print_row(args.NET, args.alpha, args.r, cutnode, t, cur_efficiency, cur_damage, iter_time)
+        print_row(args.NET, args.alpha, args.r, cutnode, t, cur_efficiency, cur_damage, iter_time, np.array_str(c_effs,precision=4))
+        c_effs = np.multiply(c_init_effs, mult)
 
 print "# Total runtime %0.4f" % (time.time() - init_time)
