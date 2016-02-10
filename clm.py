@@ -24,7 +24,7 @@ parser = argparse.ArgumentParser(
     description='Run CLM model of cascading power grid failures.',
     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('NET', type=str, 
-    help='Which grid network to use', choices=['western','karate','ieee300'])
+    help='Which grid network to use', choices=['western','karate','netscience','ieee300'])
 parser.add_argument('--alpha', type=float, help="Initial capacity to load ratio", default=1.0) 
 parser.add_argument('--r', type=float, help="Heterogenenity of loads", default=0.1) 
 parser.add_argument('--num_iters', type=int, help="Number of cascade iterations to perform", default=15)
@@ -119,7 +119,7 @@ class nxGraph(gBase):
 
     def get_edgelist(self):
         return self.graph.edges()
-        
+
     @classmethod
     def construct(cls, N, edgelist, is_generator_bus=None):
         graph = nx.Graph()
@@ -155,6 +155,13 @@ class nxGraph(gBase):
     def neighbor_edges(self, node):
         return [self._edge_ixs[(node,n)] for n in self.graph.neighbors(node)]
 
+
+def np2str(ar):
+  opt = np.get_printoptions()
+  np.set_printoptions(threshold='nan')
+  s= np.array2string(ar, precision=4, max_line_width=np.nan)
+  np.set_printoptions(**opt)
+  return s
 
 """
 class igGraph(gBase): # igraph
@@ -210,6 +217,8 @@ else:
     import graph_tool.collection
     if args.NET == 'western':
         G = gtGraph(graph_tool.collection.data["power"])
+    elif args.NET == 'netscience':
+        G = gtGraph(graph_tool.collection.data["netscience"])
     elif args.NET == 'karate':
         G = gtGraph(graph_tool.collection.data["karate"])
     else:
@@ -258,7 +267,7 @@ capacities = args.alpha * heterogeneity_q * loadings
 init_efficiency = G.get_efficiency(dists)
 run_time = time.time() - init_time
 
-print_row(args.NET, args.alpha, args.r, -1, 0, init_efficiency, 0.0, run_time, np.array2string(init_effs))
+print_row(args.NET, args.alpha, args.r, -1, 0, init_efficiency, 0.0, run_time, np2str(init_effs))
 
 for ndx in range(args.num_perts):
     c_init_effs = init_effs.copy()
@@ -283,7 +292,7 @@ for ndx in range(args.num_perts):
         cur_efficiency = G.get_efficiency(dists)
         iter_time = time.time() - iter_init_time
         cur_damage = (init_efficiency-cur_efficiency)/init_efficiency
-        print_row(args.NET, args.alpha, args.r, cutnode, t, cur_efficiency, cur_damage, iter_time, np.array2string(c_effs,precision=4))
+        print_row(args.NET, args.alpha, args.r, cutnode, t, cur_efficiency, cur_damage, iter_time, np2str(c_effs))
         c_effs = np.multiply(c_init_effs, mult)
 
 print "# Total runtime %0.4f" % (time.time() - init_time)
