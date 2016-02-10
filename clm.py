@@ -117,6 +117,9 @@ class nxGraph(gBase):
             self.ld_set   = np.flatnonzero(~is_generator_bus)
         self._init_edges(graph.edges())
 
+    def get_edgelist(self):
+        return self.graph.edges()
+        
     @classmethod
     def construct(cls, N, edgelist, is_generator_bus=None):
         graph = nx.Graph()
@@ -190,7 +193,12 @@ class igGraph(gBase): # igraph
 
 
 if args.NET == 'ieee300':
-    cls = {'networkx':nxGraph,'igraph':igGraph,'graphtool':gtGraph}[args.engine]
+    if args.engine == 'networkx':
+        cls = nxGraph
+    elif args.engine == 'graphtool':
+        cls = gtGraph
+    else:
+        raise Exception("not supported")
     from pypower import case300
     d=case300.case300()
     bus_idmap = { busid : ix for ix, busid in enumerate(d['bus'][:,0].astype('int')) }
@@ -250,7 +258,7 @@ capacities = args.alpha * heterogeneity_q * loadings
 init_efficiency = G.get_efficiency(dists)
 run_time = time.time() - init_time
 
-print_row(args.NET, args.alpha, args.r, -1, 0, init_efficiency, 0.0, run_time, np.array_str(init_effs))
+print_row(args.NET, args.alpha, args.r, -1, 0, init_efficiency, 0.0, run_time, np.array2string(init_effs))
 
 for ndx in range(args.num_perts):
     c_init_effs = init_effs.copy()
@@ -275,7 +283,7 @@ for ndx in range(args.num_perts):
         cur_efficiency = G.get_efficiency(dists)
         iter_time = time.time() - iter_init_time
         cur_damage = (init_efficiency-cur_efficiency)/init_efficiency
-        print_row(args.NET, args.alpha, args.r, cutnode, t, cur_efficiency, cur_damage, iter_time, np.array_str(c_effs,precision=4))
+        print_row(args.NET, args.alpha, args.r, cutnode, t, cur_efficiency, cur_damage, iter_time, np.array2string(c_effs,precision=4))
         c_effs = np.multiply(c_init_effs, mult)
 
 print "# Total runtime %0.4f" % (time.time() - init_time)
