@@ -5,6 +5,9 @@ import argparse
 import logging
 import time
 
+init_time = time.time()
+
+
 # import igraph
 
 try:
@@ -210,7 +213,7 @@ else:
         G=igGraph(G.toIg())
 
 
-print "# Running %s network: %s / %s" % (args.NET, str(G), G.__class__.__name__)
+print "# Running %s network: %s / %s / load_time=%0.3f" % (args.NET, str(G), G.__class__.__name__, time.time() - init_time)
 
 def print_row(net, alpha, r, pertid, t, eff, damage, runtime):
     row_format ="{:>10} |{:>7} |{:>7} |{:>7} |{:>6} |{:>12} |{:>12} |{:>9}"
@@ -224,8 +227,6 @@ def print_row(net, alpha, r, pertid, t, eff, damage, runtime):
 
 print_row("Network", "Alpha", "R", "PertId", "t", "Eff", "Damage", "RunT")
 np.set_printoptions(precision=3)
-
-init_time = time.time()
 
 diag = np.eye(G.N).astype('bool')
 init_effs = np.ones(G.num_edges)
