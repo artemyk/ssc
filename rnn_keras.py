@@ -10,7 +10,11 @@ import dynpy
 bn = dynpy.bn.BooleanNetwork(rules=dynpy.sample_nets.budding_yeast_bn)
 
 hidden_dims = 15
-timesteps   = 10
+timesteps   = 100
+
+#hidden_dims = 2
+#timesteps   = 3
+
 
 start_time = time.time()
 
@@ -48,12 +52,14 @@ elif False:
     model.add(TimeDistributedDense(bn.num_vars, activation='sigmoid'))
     #model.add(Activation('sigmoid'))
 elif True:
-    model.add(TimeDistributedDense(hidden_dims, input_dim=bn.num_vars, input_length=timesteps, activation='relu'))
-    model.add(SimpleRNN(hidden_dims, return_sequences=True, input_length=timesteps, activation='relu'))
+    #activation = 'relu'
+    activation = 'tanh'
+    model.add(TimeDistributedDense(hidden_dims, input_dim=bn.num_vars, input_length=timesteps, activation=activation))
+    model.add(SimpleRNN(hidden_dims, return_sequences=True, input_length=timesteps, activation=activation))
     model.add(TimeDistributedDense(bn.num_vars, activation='sigmoid'))
     #model.add(Activation('sigmoid'))
 else:
-    from keras.layers.advanced_activations import ELU, LeakyReLU
+    #from keras.layers.advanced_activations import ELU, LeakyReLU
     #
     model.add(SimpleRNN(hidden_dims, input_dim=bn.num_vars, return_sequences=True, input_length=timesteps, activation='tanh'))
     model.add(TimeDistributedDense(bn.num_vars, activation='sigmoid'))
@@ -94,6 +100,8 @@ trajs = np.concatenate([
          bn.get_trajectory(start_state=(np.random.rand(bn.num_vars) > 0.5).astype('uint8'), max_time=timesteps)[:,:,None]
          for _ in range(N)], 2).astype('float32').transpose([2,0,1])
 #trajs -= 0.5
+print trajs.shape
+asdf
 trajs_train = trajs[:trnN,:,:]
 trajs_test  = trajs[trnN:,:,:]
 
