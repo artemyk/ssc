@@ -37,7 +37,7 @@ def get_rnn_model(dshape, hidden_dims=10, discount=0.8, output_type='bool'):
         loss_func = binary_crossentropy
     else:
         output_activation = 'linear'
-        loss_func = binary_crossentropy # mean_squared_error
+        loss_func = lambda y_true, y_pred: (y_true - y_pred)**2 # mean_squared_error
 
     num_samples, num_timesteps, num_vars = dshape
     print "Creating %s-valued model, num_samples=%d, num_timesteps=%d, num_vars=%d" % (output_type, num_samples, num_timesteps, num_vars)
@@ -72,14 +72,14 @@ def get_rnn_model(dshape, hidden_dims=10, discount=0.8, output_type='bool'):
     #theano.config.exception_verbosity='high'
 
     #optimizer = SGD(lr=0.1, decay=1e-6, momentum=0.9, nesterov=True)
-    optimizer = 'sgd'
+    #optimizer = 'sgd'
     optimizer = 'rmsprop'
 
     if True:
         timeweights = discount ** np.arange(num_timesteps)
         def get_timeweighted_loss(timeweights):
             def f(y_true, y_pred):
-                ce = K.binary_crossentropy(y_pred, y_true)
+                ce = loss_func(y_pred, y_true)
                 ce = timeweights * ce
                 return K.mean(ce, axis=-1)
             return f
