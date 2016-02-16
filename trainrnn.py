@@ -1,6 +1,13 @@
 import keras.backend as K
 from keras.layers.core import RepeatVector, TimeDistributedDense, MaskedLayer
 import numpy as np
+            
+from keras.models import Sequential
+from keras.layers.core import Dense, Dropout, Activation, TimeDistributedDense, RepeatVector
+from keras.layers.recurrent import SimpleRNN
+from keras.optimizers import SGD
+
+from keras.objectives import binary_crossentropy, mean_squared_error
 
 class PadZerosVector(RepeatVector):
     '''Pad the input with n-1 zeros
@@ -35,13 +42,6 @@ class SimpleRNNSingleInput(SimpleRNN):
             h = 0.0
         output = self.activation(h + K.dot(prev_output, self.U))
         return output, [output]
-            
-from keras.models import Sequential
-from keras.layers.core import Dense, Dropout, Activation, TimeDistributedDense, RepeatVector
-from keras.layers.recurrent import SimpleRNN
-from keras.optimizers import SGD
-
-from keras.objectives import binary_crossentropy, mean_squared_error
 
 def get_rnn_model(dshape, hidden_dims=10, discount=0.8, output_type='bool'):
 
