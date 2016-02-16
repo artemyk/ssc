@@ -39,7 +39,7 @@ class SimpleRNNSingleInput(SimpleRNN):
             h = K.dot(x, self.W) + self.b
             self.first_step = False
         else:
-            h = self.b
+            h = 0.
         output = self.activation(h + K.dot(prev_output, self.U))
         return output, [output]
 
