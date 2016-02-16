@@ -29,7 +29,7 @@ class PadZerosVector(RepeatVector):
 class SimpleRNNSingleInput(SimpleRNN):
     def get_output(self, *kargs, **kwargs):
         self.first_step = True
-        return super(SimpleRNN2, self).get_output(*kargs, **kwargs)
+        return super(SimpleRNNSingleInput, self).get_output(*kargs, **kwargs)
 
     def step(self, x, states):
         # states only contains the previous output.
@@ -90,7 +90,7 @@ def get_rnn_model(dshape, hidden_dims=10, discount=0.8, output_type='bool'):
     elif True:
         #from keras.layers.advanced_activations import ELU, LeakyReLU
         #
-        model.add(SimpleRNN2(hidden_dims, input_dim=num_vars, return_sequences=True, input_length=num_timesteps, activation='tanh'))
+        model.add(SimpleRNNSingleInput(hidden_dims, input_dim=num_vars, return_sequences=True, input_length=num_timesteps, activation='tanh'))
         model.add(TimeDistributedDense(num_vars, activation=output_activation))
     elif True:
         #activation = 'relu'
