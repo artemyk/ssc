@@ -88,8 +88,10 @@ def get_rnn_model(dshape, hidden_dims=10, discount=0.8, output_type='bool'):
         model.add(Dense(num_vars, input_dim=num_vars, activation='tanh')) # , init='uniform', activation='sigmoid'))
         model.add(RepeatVector(num_timesteps))
     elif True:
-        #from keras.layers.advanced_activations import ELU, LeakyReLU
-        #
+        model.add(Dense(hidden_dims, input_dim=num_vars, activation='tanh')) # , init='uniform', activation='sigmoid'))
+        model.add(SimpleRNNSingleInput(hidden_dims, input_dim=hidden_dims, return_sequences=True, input_length=num_timesteps, activation='tanh'))
+        model.add(TimeDistributedDense(num_vars, activation=output_activation))
+    elif True:
         model.add(SimpleRNNSingleInput(hidden_dims, input_dim=num_vars, return_sequences=True, input_length=num_timesteps, activation='tanh'))
         model.add(TimeDistributedDense(num_vars, activation=output_activation))
     elif True:
