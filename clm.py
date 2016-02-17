@@ -158,11 +158,13 @@ class nxGraph(gBase):
 
 
 def np2str(ar):
-  opt = np.get_printoptions()
-  np.set_printoptions(threshold='nan')
-  s= np.array2string(ar, precision=4, max_line_width=np.nan)
-  np.set_printoptions(**opt)
-  return s
+  return "["+" ".join(np.char.mod("%.4g", ar))+"]" 
+
+  #opt = np.get_printoptions()
+  #np.set_printoptions(threshold='nan')
+  #s= np.array2string(ar, precision=4, max_line_width=np.nan)
+  #np.set_printoptions(**opt)
+  #return s
 
 """
 class igGraph(gBase): # igraph
@@ -231,6 +233,7 @@ else:
         G=igGraph(G.toIg())
 
 
+print "#", args
 print "# Running %s network: %s / %s / load_time=%0.3f" % (args.NET, str(G), G.__class__.__name__, time.time() - init_time)
 print "# Edgelist:", str(G.get_edgelist())
 
@@ -273,9 +276,13 @@ print_row(args.NET, args.alpha, args.r, -1, 0, init_efficiency, 0.0, run_time, n
 for ndx in range(args.num_perts):
     c_init_effs = init_effs.copy()
 
-    nodes_to_cut = np.random.randint(args.max_pert_nodes)
+    if args.max_pert_nodes == 1:
+       nodes_to_cut = 1
+    else:
+       nodes_to_cut = np.random.randint(args.max_pert_nodes-1)+1
     print "# Cutting %d nodes" % nodes_to_cut # edges", G.neighbor_edges(cutnode)
-    for _ in range(nodes_to_cut):
+    cutnodes = np.random.choice(G.N, nodes_to_cut, replace=False)
+    for cutnode in cutnodes:
       cutnode = np.random.randint(G.N)
       c_init_effs[G.neighbor_edges(cutnode)] = 0.0
             
@@ -295,7 +302,7 @@ for ndx in range(args.num_perts):
         cur_efficiency = G.get_efficiency(dists)
         iter_time = time.time() - iter_init_time
         cur_damage = (init_efficiency-cur_efficiency)/init_efficiency
-        print_row(args.NET, args.alpha, args.r, cutnode, t, cur_efficiency, cur_damage, iter_time, np2str(c_effs))
+        print_row(args.NET, args.alpha, args.r, ",".join(map(str,cutnodes)), t, cur_efficiency, cur_damage, iter_time, np2str(c_effs))
         c_effs = np.multiply(c_init_effs, mult)
 
 print "# Total runtime %0.4f" % (time.time() - init_time)
