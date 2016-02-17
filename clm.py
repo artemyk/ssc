@@ -29,6 +29,7 @@ parser.add_argument('--alpha', type=float, help="Initial capacity to load ratio"
 parser.add_argument('--r', type=float, help="Heterogenenity of loads", default=0.1) 
 parser.add_argument('--num_iters', type=int, help="Number of cascade iterations to perform", default=15)
 parser.add_argument('--num_perts', type=int, help="Number of initial perturbations to sample", default=10)
+parser.add_argument('--max_pert_nodes', type=int, help="Maximum number of nodes to perturb initially (drawn from uniform distribution from 1..max_per_nodes)", default=1)
 parser.add_argument('--rndseed', type=int, help="Random seed") 
 parser.add_argument('--engine', type=str, help='Which network package to use', choices=['graphtool','networkx','igraph'], default='graphtool')
 
@@ -272,9 +273,11 @@ print_row(args.NET, args.alpha, args.r, -1, 0, init_efficiency, 0.0, run_time, n
 for ndx in range(args.num_perts):
     c_init_effs = init_effs.copy()
 
-    cutnode = np.random.randint(G.N)
-    #print "# Cutting edges", G.neighbor_edges(cutnode)
-    c_init_effs[G.neighbor_edges(cutnode)] = 0.0
+    nodes_to_cut = np.random.randint(args.max_pert_nodes)
+    print "# Cutting %d nodes" % nodes_to_cut # edges", G.neighbor_edges(cutnode)
+    for _ in range(nodes_to_cut):
+      cutnode = np.random.randint(G.N)
+      c_init_effs[G.neighbor_edges(cutnode)] = 0.0
             
     c_effs = c_init_effs.copy()
 
