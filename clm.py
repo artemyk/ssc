@@ -29,6 +29,7 @@ parser.add_argument('--alpha', type=float, help="Initial capacity to load ratio"
 parser.add_argument('--r', type=float, help="Heterogenenity of loads", default=0.1) 
 parser.add_argument('--num_iters', type=int, help="Number of cascade iterations to perform", default=15)
 parser.add_argument('--num_perts', type=int, help="Number of initial perturbations to sample", default=10)
+parser.add_argument('--max_pert_nodes', type=int, help="Maximum number of nodes to perturb initially (drawn from uniform distribution from 1..max_per_nodes)", default=1)
 parser.add_argument('--rndseed', type=int, help="Random seed") 
 parser.add_argument('--engine', type=str, help='Which network package to use', choices=['graphtool','networkx','igraph'], default='graphtool')
 
@@ -157,11 +158,13 @@ class nxGraph(gBase):
 
 
 def np2str(ar):
-  opt = np.get_printoptions()
-  np.set_printoptions(threshold='nan')
-  s= np.array2string(ar, precision=4, max_line_width=np.nan)
-  np.set_printoptions(**opt)
-  return s
+  return "["+" ".join(np.char.mod("%.4g", ar))+"]" 
+
+  #opt = np.get_printoptions()
+  #np.set_printoptions(threshold='nan')
+  #s= np.array2string(ar, precision=4, max_line_width=np.nan)
+  #np.set_printoptions(**opt)
+  #return s
 
 """
 class igGraph(gBase): # igraph
@@ -230,6 +233,7 @@ else:
         G=igGraph(G.toIg())
 
 
+print "#", args
 print "# Running %s network: %s / %s / load_time=%0.3f" % (args.NET, str(G), G.__class__.__name__, time.time() - init_time)
 print "# Edgelist:", str(G.get_edgelist())
 
@@ -272,9 +276,15 @@ print_row(args.NET, args.alpha, args.r, -1, 0, init_efficiency, 0.0, run_time, n
 for ndx in range(args.num_perts):
     c_init_effs = init_effs.copy()
 
-    cutnode = np.random.randint(G.N)
-    #print "# Cutting edges", G.neighbor_edges(cutnode)
-    c_init_effs[G.neighbor_edges(cutnode)] = 0.0
+    if args.max_pert_nodes == 1:
+       nodes_to_cut = 1
+    else:
+       nodes_to_cut = np.random.randint(args.max_pert_nodes-1)+1
+    print "# Cutting %d nodes" % nodes_to_cut # edges", G.neighbor_edges(cutnode)
+    cutnodes = np.random.choice(G.N, nodes_to_cut, replace=False)
+    for cutnode in cutnodes:
+      cutnode = np.random.randint(G.N)
+      c_init_effs[G.neighbor_edges(cutnode)] = 0.0
             
     c_effs = c_init_effs.copy()
 
@@ -292,7 +302,7 @@ for ndx in range(args.num_perts):
         cur_efficiency = G.get_efficiency(dists)
         iter_time = time.time() - iter_init_time
         cur_damage = (init_efficiency-cur_efficiency)/init_efficiency
-        print_row(args.NET, args.alpha, args.r, cutnode, t, cur_efficiency, cur_damage, iter_time, np2str(c_effs))
+        print_row(args.NET, args.alpha, args.r, ",".join(map(str,cutnodes)), t, cur_efficiency, cur_damage, iter_time, np2str(c_effs))
         c_effs = np.multiply(c_init_effs, mult)
 
 print "# Total runtime %0.4f" % (time.time() - init_time)
