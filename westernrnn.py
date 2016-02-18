@@ -20,12 +20,12 @@ trajs = np.stack(split_mx(df))
 import trainrnn
 import logging    
 logging.getLogger('keras').setLevel(logging.INFO)
-hidden_dims = 150
+hidden_dims = 350
 
 model = trainrnn.get_rnn_model(dshape=trajs.shape, hidden_dims=hidden_dims, output_type='real')
 
 
-model.fit(trajs, trajs, nb_epoch=30, batch_size=10, validation_split=0.1, show_accuracy=True, verbose=1)
+# model.fit(trajs, trajs, nb_epoch=100, batch_size=10, validation_split=0.1, show_accuracy=True, verbose=1)
 #model.fit(trajs, trajs, nb_epoch=10, batch_size=5, validation_split=0.1, show_accuracy=True, verbose=1)
-#model.fit(trajs, trajs, nb_epoch=10, batch_size=1, validation_split=0.1, show_accuracy=True, verbose=1)
+model.fit(trajs, trajs, nb_epoch=100, batch_size=1, validation_split=0.1, show_accuracy=True, verbose=1)
 

@@ -36,18 +36,24 @@ class SimpleRNNSingleInput(SimpleRNN):
         assert len(states) == 1
         prev_output = states[0]
         if self.first_step:
-            h = K.dot(x, self.W) + self.b
+            state = K.dot(x, self.W) + self.b
             self.first_step = False
         else:
-            h = 0.
-        output = self.activation(h + K.dot(prev_output, self.U))
+            state = K.dot(prev_output, self.U)
+        output = self.activation(state)
+        #output = self.activation(h + K.dot(prev_output, self.U))
         return output, [output]
 
-def get_rnn_model(dshape, hidden_dims=10, discount=0.8, output_type='bool'):
+def get_rnn_model(dshape, num_output_vars, macro_dims=10, discount=0.8, output_type='bool', archtype='RNN', 
+                  hidden_layer_dims=[], activation='tanh', optimizer='rmsprop'):
 
-    num_samples, num_timesteps, num_vars = dshape
-    print "Creating %s-valued model, num_samples=%d, num_timesteps=%d, num_vars=%d" % (output_type, num_samples, num_timesteps, num_vars)
-    print "Discount factor=%0.2f" % discount
+    num_samples, num_timesteps, num_input_vars = dshape
+    print "Creating %s-valued model, archtype %s, internal activation=%s, optimizer=%s" % \
+          (output_type, archtype, activation, optimizer)
+    print "num_samples=%d, num_timesteps=%d, num_input_vars=%d, num_output_vars=%d" % (num_samples, num_timesteps, num_input_vars, num_output_vars)
+    print "macro_dims=%d, hidden_layer_dims=%s" % (macro_dims, str(hidden_layer_dims))
+    print "discount factor=%0.2f" % discount
+    
     """
     class Copy(MaskedLayer):
         def get_output(self, train=False):
@@ -78,23 +84,67 @@ def get_rnn_model(dshape, hidden_dims=10, discount=0.8, output_type='bool'):
 
     if output_type == 'bool':
         output_activation = 'sigmoid'
-        loss_func = binary_crossentropy
     else:
         output_activation = 'linear'
-        loss_func = lambda y_true, y_pred: (y_true - y_pred)**2 # mean_squared_error
 
     model = Sequential()
-    if False:
+    
+    c_activation, extra_activation_cls = activation, None
+    if activation.lower() in ['prelu', 'leakyrelu']:
+        c_activation = 'linear'
+        if activation.lower() == 'prelu':
+            from keras.layers.advanced_activations import PReLU
+            extra_activation_cls = PReLU
+        else:
+            from keras.layers.advanced_activations import LeakyReLU
+            extra_activation_cls = LeakyReLU
+        
+    init_dist = 'lecun_uniform'
+    init_dist = 'he_normal'
+    
+    if archtype == 'RNN':
+        if hidden_layer_dims:
+            raise Exception('hidden_layer_dims not supported')
+            
+        model.add(SimpleRNN(macro_dims, input_dim=num_input_vars, return_sequences=True, input_length=num_timesteps, 
+                            activation=c_activation, init=init_dist))
+        if extra_activation_cls is not None:
+            model.add(extra_activation_cls())
+        model.add(TimeDistributedDense(num_output_vars, activation=output_activation))
+        
+    elif archtype == 'RNNInitialTime':
+        c_dim = num_input_vars
+        for d in hidden_layer_dims:
+            model.add(TimeDistributedDense(d, input_dim=c_dim, input_length=num_timesteps, 
+                                           activation=c_activation, init=init_dist))
+            c_dim = d
+            if extra_activation_cls is not None:
+                model.add(extra_activation_cls())
+            
+        model.add(SimpleRNNSingleInput(macro_dims, input_dim=c_dim, return_sequences=True, 
+                                       input_length=num_timesteps, 
+                                       activation=c_activation, init=init_dist))
+        if extra_activation_cls is not None:
+            model.add(extra_activation_cls())
+            
+        c_dim = macro_dims
+        for d in hidden_layer_dims[::-1]:
+            model.add(TimeDistributedDense(d, input_dim=c_dim, input_length=num_timesteps, 
+                                           activation=c_activation, init=init_dist))
+            c_input_dim = d
+            if extra_activation_cls is not None:
+                model.add(extra_activation_cls())
+
+        model.add(TimeDistributedDense(num_output_vars, input_dim=c_dim, 
+                                       activation=output_activation, init=init_dist))
+        
+    else:
+        raise Exception('Unknown RNN architecture %s'% archtype)
+    """    
+    elif False:
         model.add(Dense(num_vars, input_dim=num_vars, activation='tanh')) # , init='uniform', activation='sigmoid'))
         model.add(RepeatVector(num_timesteps))
-    elif True:
-        model.add(TimeDistributedDense(hidden_dims, input_dim=num_vars, input_length=num_timesteps, activation='tanh'))
-        model.add(SimpleRNNSingleInput(hidden_dims, input_dim=hidden_dims, return_sequences=True, input_length=num_timesteps, activation='tanh'))
-        model.add(TimeDistributedDense(num_vars, activation=output_activation))
-    elif True:
-        model.add(SimpleRNNSingleInput(hidden_dims, input_dim=num_vars, return_sequences=True, input_length=num_timesteps, activation='tanh'))
-        model.add(TimeDistributedDense(num_vars, activation=output_activation))
-    elif True:
+    elif False:
         #activation = 'relu'
         activation = 'tanh'
         #model.add(Copy(input_dim=num_vars))
@@ -116,20 +166,13 @@ def get_rnn_model(dshape, hidden_dims=10, discount=0.8, output_type='bool'):
         model.add(TimeDistributedDense(num_vars, activation=output_activation))
         #model.add(Activation('sigmoid'))
     else:
-        #from keras.layers.advanced_activations import ELU, LeakyReLU
-        #
-        model.add(SimpleRNN(hidden_dims, input_dim=num_vars, return_sequences=True, input_length=num_timesteps, activation='tanh'))
-        model.add(TimeDistributedDense(num_vars, activation=output_activation))
-
-
-    #import theano
-    #theano.config.optimizer='None' # 'fast_compile'
-    #theano.config.exception_verbosity='high'
-
-    #optimizer = SGD(lr=0.1, decay=1e-6, momentum=0.9, nesterov=True)
-    #optimizer = 'sgd'
-    optimizer = 'rmsprop'
-
+    """
+    
+    if output_type == 'bool':
+        loss_func = binary_crossentropy
+    else:
+        loss_func = lambda y_true, y_pred: (y_true - y_pred)**2.0 # mean_squared_error
+        
     if True:
         timeweights = discount ** np.arange(num_timesteps)
         def get_timeweighted_loss(timeweights):
