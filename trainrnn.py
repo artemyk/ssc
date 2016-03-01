@@ -35,22 +35,89 @@ class SimpleRNNSingleInput(SimpleRNN):
         # states only contains the previous output.
         assert len(states) == 1
         prev_output = states[0]
-        if self.first_step:
-            state = K.dot(x, self.W) + self.b
-            self.first_step = False
-        else:
-            state = K.dot(prev_output, self.U)
+        mult = 1. if self.first_step else 0.
+        
+        state = mult * (K.dot(x, self.W) + self.b) + (1.-mult) * K.dot(prev_output, self.U)
+        self.first_step = False
+        
+        #if self.first_step:
+        #    state = K.dot(x, self.W) + self.b
+        #    self.first_step = False
+        #else:
+        #    state = K.dot(prev_output, self.U)
         output = self.activation(state)
         #output = self.activation(h + K.dot(prev_output, self.U))
         return output, [output]
 
-def get_rnn_model(dshape, num_output_vars, macro_dims=10, discount=0.8, output_type='bool', archtype='RNN', 
-                  hidden_layer_dims=[], activation='tanh', optimizer='rmsprop'):
+class SimpleRNNSingleInput2(SimpleRNN):
+    def step(self, x, states):
+        assert len(states) == 1
+        prev_output = states[0]
+        state = 0.0*(K.dot(x, self.W)) + K.dot(prev_output, self.U) + self.b
+        output = self.activation(state)
+        return output, [output]
 
-    num_samples, num_timesteps, num_input_vars = dshape
-    print "Creating %s-valued model, archtype %s, internal activation=%s, optimizer=%s" % \
-          (output_type, archtype, activation, optimizer)
-    print "num_samples=%d, num_timesteps=%d, num_input_vars=%d, num_output_vars=%d" % (num_samples, num_timesteps, num_input_vars, num_output_vars)
+    def get_initial_states(self, X):
+        # build an all-zero tensor of shape (samples, output_dim)
+        #initial_state = K.zeros_like(X)  # (samples, timesteps, input_dim)
+        #initial_state = K.sum(initial_state, axis=1)  # (samples, input_dim)
+        #reducer = K.zeros((self.input_dim, self.output_dim))
+        #initial_state = K.dot(initial_state, reducer)  # (samples, output_dim)
+        #c_mask = K.zeros_like(X)  # (samples, timesteps, input_dim)
+        #c_mask[:,0,:] = 0
+        #return X # K.dot(X, self.W) + self.b
+        initial_state = X[:,0,:]  # (samples, output_dim)
+        initial_states = [initial_state for _ in range(len(self.states))]
+        return initial_states
+        
+        
+
+class SimpleRNNTDD(SimpleRNN):
+    def step(self, x, states):
+        self.I = K.variable(value=np.eye(self.input_dim))
+        prev_output = states[0]
+        h = K.dot(x, 0.0*self.W + 1.0*self.I) + self.b
+        output = self.activation(h + K.dot(prev_output, self.U))
+        return output, [output]
+    
+class TDD(TimeDistributedDense):
+    def __init__(self, *kargs, **kwargs):
+        super(TDD, self).__init__(*kargs, **kwargs)
+        mult = np.zeros(self.input_length)
+        mult[0] = 1.0
+        self.mult = K.variable(value=mult)[None,:,None]
+        
+    def get_output(self, train=False):
+        y = super(TDD, self).get_output(train)
+        return self.mult * y
+    
+        """
+        X = self.get_input(train)
+
+        output1 = K.dot(X[0], self.W) + self.b
+        x_shape = K.shape(X)
+        z=K.zeros( (x_shape[0], x_shape[1], self.input_length-1) )
+        outputs = K.concatenate([output1[:,None,:],] + [z,], axis=1)
+        #cmask[:,0,:]+=1.0
+        outputs = self.activation(outputs)
+        return outputs
+        """
+
+    
+def get_rnn_model(num_timesteps, num_input_vars, num_output_vars, macro_dims=10, discount=0.8, 
+                  output_type='bool', 
+                  archtype='RNN', 
+                  hidden_layer_dims=[],
+                  hidden_activation='tanh', 
+                  macro_activation=None,
+                  activation_props=dict(),
+                  optimizer='rmsprop'):
+
+    if macro_activation is None:
+        macro_activation = hidden_activation
+    print "Creating %s-valued model, archtype %s, hidden activation=%s, macro activation=%s, optimizer=%s" % \
+          (output_type, archtype, hidden_activation, macro_activation, optimizer)
+    print "num_timesteps=%d, num_input_vars=%d, num_output_vars=%d" % (num_timesteps, num_input_vars, num_output_vars)
     print "macro_dims=%d, hidden_layer_dims=%s" % (macro_dims, str(hidden_layer_dims))
     print "discount factor=%0.2f" % discount
     
@@ -89,55 +156,110 @@ def get_rnn_model(dshape, num_output_vars, macro_dims=10, discount=0.8, output_t
 
     model = Sequential()
     
-    c_activation, extra_activation_cls = activation, None
-    if activation.lower() in ['prelu', 'leakyrelu']:
-        c_activation = 'linear'
-        if activation.lower() == 'prelu':
+    def get_activation(p_act):
+        act = p_act.lower()
+        if act == 'prelu':
             from keras.layers.advanced_activations import PReLU
-            extra_activation_cls = PReLU
-        else:
+            act = PReLU(**activation_props)
+        elif act == 'srelu':
+            from keras.layers.advanced_activations import SReLU
+            act = SReLU(**activation_props)
+        elif act == 'leakyrelu':
             from keras.layers.advanced_activations import LeakyReLU
-            extra_activation_cls = LeakyReLU
+            act = LeakyReLU(**activation_props)
+        return act
+        
+    hidden_activation = get_activation(hidden_activation)
+    macro_activation  = get_activation(macro_activation)
         
     init_dist = 'lecun_uniform'
     init_dist = 'he_normal'
     
-    if archtype == 'RNN':
-        if hidden_layer_dims:
-            raise Exception('hidden_layer_dims not supported')
+    if archtype == 'rnn':
+        if hidden_layer_dims: raise Exception('hidden_layer_dims not supported')
             
         model.add(SimpleRNN(macro_dims, input_dim=num_input_vars, return_sequences=True, input_length=num_timesteps, 
-                            activation=c_activation, init=init_dist))
-        if extra_activation_cls is not None:
-            model.add(extra_activation_cls())
-        model.add(TimeDistributedDense(num_output_vars, activation=output_activation))
+                            activation=macro_activation, init=init_dist))
+        model.add(TimeDistributedDense(num_output_vars, activation=output_activation, init=init_dist))
         
-    elif archtype == 'RNNInitialTime':
+    elif archtype == 'rnn_identity':
+        if hidden_layer_dims:
+            raise Exception('hidden layer dis should be set to None for %s' % archtype)
+        if macro_dims != num_input_vars:
+            print "Setting macro_dims=num_input_vars for rnn_identity"
+            macro_dims = num_input_vars
+            # raise Exception('macro_dims should equal num_input_vars for %s'% archtype)
+            
+        model.add(TimeDistributedDense(num_input_vars, input_dim=num_input_vars, input_length=num_timesteps, 
+                                       activation='linear', init='identity', trainable=False))
+            
+        model.add(SimpleRNNSingleInput(num_input_vars, input_dim=num_input_vars, return_sequences=True, 
+                                       input_length=num_timesteps, 
+                                       activation=macro_activation, init=init_dist))
+            
+        model.add(TimeDistributedDense(num_input_vars, input_dim=num_input_vars, input_length=num_timesteps, 
+                                       activation='linear', init='identity', trainable=False))
+            
+    elif archtype == 'rnn_init_time':
         c_dim = num_input_vars
         for d in hidden_layer_dims:
             model.add(TimeDistributedDense(d, input_dim=c_dim, input_length=num_timesteps, 
-                                           activation=c_activation, init=init_dist))
+                                           activation=hidden_activation, init=init_dist))
             c_dim = d
-            if extra_activation_cls is not None:
-                model.add(extra_activation_cls())
             
         model.add(SimpleRNNSingleInput(macro_dims, input_dim=c_dim, return_sequences=True, 
                                        input_length=num_timesteps, 
-                                       activation=c_activation, init=init_dist))
-        if extra_activation_cls is not None:
-            model.add(extra_activation_cls())
+                                       activation=macro_activation, init=init_dist))
             
         c_dim = macro_dims
         for d in hidden_layer_dims[::-1]:
             model.add(TimeDistributedDense(d, input_dim=c_dim, input_length=num_timesteps, 
-                                           activation=c_activation, init=init_dist))
+                                           activation=hidden_activation, init=init_dist))
             c_input_dim = d
-            if extra_activation_cls is not None:
-                model.add(extra_activation_cls())
 
         model.add(TimeDistributedDense(num_output_vars, input_dim=c_dim, 
                                        activation=output_activation, init=init_dist))
         
+    elif archtype == 'rnn1':
+        model.add(TimeDistributedDense(macro_dims, input_dim=num_input_vars, input_length=num_timesteps, 
+                                       activation='linear', init=init_dist))
+            
+        model.add(SimpleRNNSingleInput2(macro_dims, input_dim=macro_dims, return_sequences=True, 
+                                       input_length=num_timesteps, 
+                                       activation=macro_activation, init=init_dist))
+            
+        model.add(TimeDistributedDense(num_output_vars, input_dim=macro_dims, 
+                                       activation=output_activation, init=init_dist))      
+    elif archtype == 'rnn2':
+        model.add(TDD(macro_dims, input_dim=num_input_vars, input_length=num_timesteps, 
+                                       activation='linear', init=init_dist))
+            
+        model.add(SimpleRNNTDD(macro_dims, input_dim=macro_dims, return_sequences=True, 
+                                       input_length=num_timesteps, 
+                                       activation=macro_activation, init=init_dist))
+            
+        model.add(TimeDistributedDense(num_output_vars, input_dim=macro_dims, 
+                                       activation=output_activation, init=init_dist))          
+    elif archtype == 'rnn3':
+        model.add(TDD(macro_dims, input_dim=num_input_vars, input_length=num_timesteps, 
+                                       activation='tanh', init=init_dist))
+            
+        model.add(SimpleRNNTDD(macro_dims, input_dim=macro_dims, return_sequences=True, 
+                                       input_length=num_timesteps, 
+                                       activation=macro_activation, init=init_dist))
+            
+        model.add(TimeDistributedDense(num_output_vars, input_dim=macro_dims, 
+                                       activation=output_activation, init=init_dist))          
+    elif archtype == 'rnn4':
+        model.add(TDD(macro_dims, input_dim=num_input_vars, input_length=num_timesteps, 
+                                       activation='tanh', init=init_dist))
+            
+        model.add(SimpleRNN(macro_dims, input_dim=macro_dims, return_sequences=True, 
+                                       input_length=num_timesteps, 
+                                       activation=macro_activation, init=init_dist))
+            
+        model.add(TimeDistributedDense(num_output_vars, input_dim=macro_dims, 
+                                       activation=output_activation, init=init_dist))          
     else:
         raise Exception('Unknown RNN architecture %s'% archtype)
     """    
@@ -185,6 +307,7 @@ def get_rnn_model(dshape, num_output_vars, macro_dims=10, discount=0.8, output_t
         loss = get_timeweighted_loss(timeweights[None,:,None])
 
     #loss = 'binary_crossentropy'
-    model.compile(class_mode='binary', loss='mse', optimizer=optimizer)
+    print "Just doing MSE error, not timediscounted!"
+    model.compile(loss='mse', optimizer=optimizer)
 
     return model
