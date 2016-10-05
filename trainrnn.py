@@ -1,5 +1,5 @@
 import keras.backend as K
-from keras.layers.core import RepeatVector, TimeDistributedDense, MaskedLayer
+from keras.layers.core import RepeatVector, TimeDistributedDense
 import numpy as np
             
 from keras.models import Sequential
