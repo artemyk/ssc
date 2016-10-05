@@ -255,8 +255,7 @@ def get_rnn_model(num_timesteps, num_input_vars, num_output_vars, macro_dims=10,
                                        activation=output_activation, init=init_dist))) 
         
     elif archtype == 'rnn2_stacked':
-        model.add(TDD(Dense(100, input_dim=num_input_vars, input_length=num_timesteps, 
-                                       activation='tanh', init=init_dist)))
+        model.add(TDD(Dense(100, input_dim=num_input_vars, activation='tanh', init=init_dist), input_length=num_timesteps))
         model.add(TDD(Dense(50, input_dim=100, input_length=num_timesteps, 
                                        activation='tanh', init=init_dist)))
         model.add(TDD(Dense(macro_dims, input_dim=50, input_length=num_timesteps, 
@@ -284,8 +283,7 @@ def get_rnn_model(num_timesteps, num_input_vars, num_output_vars, macro_dims=10,
                                        activation=output_activation, init=init_dist)))
         
     elif archtype == 'rnn3':
-        model.add(TDD(Dense(macro_dims, input_dim=num_input_vars, input_length=num_timesteps, 
-                                       activation='tanh', init=init_dist)))
+        model.add(TDD(Dense(macro_dims, input_dim=num_input_vars, activation='tanh', init=init_dist), input_length=num_timesteps))
             
         model.add(SimpleRNNTDD(macro_dims, U_regularizer=regobj, input_dim=macro_dims, return_sequences=True, 
                                        input_length=num_timesteps, 
