@@ -1,9 +1,9 @@
 import keras.backend as K
-from keras.layers.core import RepeatVector, TimeDistributedDense
 import numpy as np
             
 from keras.models import Sequential
-from keras.layers.core import Dense, Dropout, Activation, TimeDistributedDense, RepeatVector
+from keras.layers.core import Dense, Dropout, Activation, RepeatVector
+from keras.layers.wrappers import TimeDistributed
 from keras.layers.recurrent import SimpleRNN
 from keras.optimizers import SGD
 
@@ -83,7 +83,7 @@ class SimpleRNNTDD(SimpleRNN):
         output = self.activation(h + K.dot(prev_output, self.U))
         return output, [output]
     
-class TDD(TimeDistributedDense):
+class TDD(TimeDistributed):
     def __init__(self, *kargs, **kwargs):
         super(TDD, self).__init__(*kargs, **kwargs)
         mult = np.zeros(self.input_length)
@@ -193,7 +193,7 @@ def get_rnn_model(num_timesteps, num_input_vars, num_output_vars, macro_dims=10,
         model.add(SimpleRNN(macro_dims, input_dim=num_input_vars, return_sequences=True, input_length=num_timesteps, 
                             activation=macro_activation, init=init_dist, U_regularizer=regobj))
         
-        model.add(TimeDistributedDense(num_output_vars, activation=output_activation, init=init_dist))
+        model.add(TimeDistributed(Dense(num_output_vars, activation=output_activation, init=init_dist)))
         """
     elif archtype == 'rnn_identity':
         if hidden_layer_dims:
@@ -203,21 +203,21 @@ def get_rnn_model(num_timesteps, num_input_vars, num_output_vars, macro_dims=10,
             macro_dims = num_input_vars
             # raise Exception('macro_dims should equal num_input_vars for %s'% archtype)
             
-        model.add(TimeDistributedDense(num_input_vars, input_dim=num_input_vars, input_length=num_timesteps, 
-                                       activation='linear', init='identity', trainable=False))
+        model.add(TimeDistributed(Dense(num_input_vars, input_dim=num_input_vars, input_length=num_timesteps, 
+                                       activation='linear', init='identity', trainable=False)))
             
         model.add(SimpleRNNSingleInput(num_input_vars, input_dim=num_input_vars, return_sequences=True, 
                                        input_length=num_timesteps, 
                                        activation=macro_activation, init=init_dist))
             
-        model.add(TimeDistributedDense(num_input_vars, input_dim=num_input_vars, input_length=num_timesteps, 
-                                       activation='linear', init='identity', trainable=False))
+        model.add(TimeDistributed(Dense(num_input_vars, input_dim=num_input_vars, input_length=num_timesteps, 
+                                       activation='linear', init='identity', trainable=False)))
             
     elif archtype == 'rnn_init_time':
         c_dim = num_input_vars
         for d in hidden_layer_dims:
-            model.add(TimeDistributedDense(d, input_dim=c_dim, input_length=num_timesteps, 
-                                           activation=hidden_activation, init=init_dist))
+            model.add(TimeDistributed(Dense(d, input_dim=c_dim, input_length=num_timesteps, 
+                                           activation=hidden_activation, init=init_dist)))
             c_dim = d
             
         model.add(SimpleRNNSingleInput(macro_dims, input_dim=c_dim, return_sequences=True, 
@@ -226,96 +226,96 @@ def get_rnn_model(num_timesteps, num_input_vars, num_output_vars, macro_dims=10,
             
         c_dim = macro_dims
         for d in hidden_layer_dims[::-1]:
-            model.add(TimeDistributedDense(d, input_dim=c_dim, input_length=num_timesteps, 
-                                           activation=hidden_activation, init=init_dist))
+            model.add(TimeDistributed(Dense(d, input_dim=c_dim, input_length=num_timesteps, 
+                                           activation=hidden_activation, init=init_dist)))
             c_input_dim = d
 
-        model.add(TimeDistributedDense(num_output_vars, input_dim=c_dim, 
-                                       activation=output_activation, init=init_dist))
+        model.add(TimeDistributed(Dense(num_output_vars, input_dim=c_dim, 
+                                       activation=output_activation, init=init_dist)))
     """
     elif archtype == 'rnn1':
-        model.add(TimeDistributedDense(macro_dims, input_dim=num_input_vars, input_length=num_timesteps, 
-                                       activation='linear', init=init_dist))
+        model.add(TimeDistributed(Dense(macro_dims, input_dim=num_input_vars, input_length=num_timesteps, 
+                                       activation='linear', init=init_dist)))
             
         model.add(SimpleRNNSingleInput2(macro_dims, U_regularizer=regobj, input_dim=macro_dims, return_sequences=True, 
                                        input_length=num_timesteps, 
                                        activation=macro_activation, init=init_dist))
             
-        model.add(TimeDistributedDense(num_output_vars, input_dim=macro_dims, 
-                                       activation=output_activation, init=init_dist))      
+        model.add(TimeDistributed(Dense(num_output_vars, input_dim=macro_dims, 
+                                       activation=output_activation, init=init_dist)))
     elif archtype == 'rnn2':
-        model.add(TDD(macro_dims, input_dim=num_input_vars, input_length=num_timesteps, 
-                                       activation='linear', init=init_dist))
+        model.add(TDD(Dense(macro_dims, input_dim=num_input_vars, input_length=num_timesteps, 
+                                       activation='linear', init=init_dist)))
             
         model.add(SimpleRNNTDD(macro_dims, U_regularizer=regobj, input_dim=macro_dims, return_sequences=True, 
                                        input_length=num_timesteps, 
                                        activation=macro_activation, init=init_dist))
             
-        model.add(TimeDistributedDense(num_output_vars, input_dim=macro_dims, 
-                                       activation=output_activation, init=init_dist))  
+        model.add(TimeDistributed(Dense(num_output_vars, input_dim=macro_dims, 
+                                       activation=output_activation, init=init_dist))) 
         
     elif archtype == 'rnn2_stacked':
-        model.add(TDD(100, input_dim=num_input_vars, input_length=num_timesteps, 
-                                       activation='tanh', init=init_dist))
-        model.add(TDD(50, input_dim=100, input_length=num_timesteps, 
-                                       activation='tanh', init=init_dist))
-        model.add(TDD(macro_dims, input_dim=50, input_length=num_timesteps, 
-                                       activation='tanh', init=init_dist))
+        model.add(TDD(Dense(100, input_dim=num_input_vars, input_length=num_timesteps, 
+                                       activation='tanh', init=init_dist)))
+        model.add(TDD(Dense(50, input_dim=100, input_length=num_timesteps, 
+                                       activation='tanh', init=init_dist)))
+        model.add(TDD(Dense(macro_dims, input_dim=50, input_length=num_timesteps, 
+                                       activation='tanh', init=init_dist)))
             
         model.add(SimpleRNNTDD(macro_dims, U_regularizer=regobj, input_dim=macro_dims, return_sequences=True, 
                                        input_length=num_timesteps, 
                                        activation=macro_activation, init=init_dist))
             
-        model.add(TimeDistributedDense(num_output_vars, input_dim=macro_dims, 
-                                       activation=output_activation, init=init_dist))       
+        model.add(TimeDistributed(Dense(num_output_vars, input_dim=macro_dims, 
+                                       activation=output_activation, init=init_dist)))
         
     elif archtype == 'rnn2_invstacked':
-        model.add(TDD(macro_dims, input_dim=num_input_vars, input_length=num_timesteps, 
-                                       activation='linear', init=init_dist))
+        model.add(TDD(Dense(macro_dims, input_dim=num_input_vars, input_length=num_timesteps, 
+                                       activation='linear', init=init_dist)))
         model.add(SimpleRNNTDD(macro_dims, U_regularizer=regobj, input_dim=macro_dims, return_sequences=True, 
                                        input_length=num_timesteps, 
                                        activation=macro_activation, init=init_dist))
             
-        model.add(TimeDistributedDense(50, input_dim=macro_dims, input_length=num_timesteps, 
-                                       activation='tanh', init=init_dist))
-        model.add(TimeDistributedDense(100, input_dim=50, input_length=num_timesteps, 
-                                       activation='tanh', init=init_dist))
-        model.add(TimeDistributedDense(num_output_vars, input_dim=100, 
-                                       activation=output_activation, init=init_dist))          
+        model.add(TimeDistributed(Dense(50, input_dim=macro_dims, input_length=num_timesteps, 
+                                       activation='tanh', init=init_dist)))
+        model.add(TimeDistributed(Dense(100, input_dim=50, input_length=num_timesteps, 
+                                       activation='tanh', init=init_dist)))
+        model.add(TimeDistributed(Dense(num_output_vars, input_dim=100, 
+                                       activation=output_activation, init=init_dist)))
         
     elif archtype == 'rnn3':
-        model.add(TDD(macro_dims, input_dim=num_input_vars, input_length=num_timesteps, 
-                                       activation='tanh', init=init_dist))
+        model.add(TDD(Dense(macro_dims, input_dim=num_input_vars, input_length=num_timesteps, 
+                                       activation='tanh', init=init_dist)))
             
         model.add(SimpleRNNTDD(macro_dims, U_regularizer=regobj, input_dim=macro_dims, return_sequences=True, 
                                        input_length=num_timesteps, 
                                        activation=macro_activation, init=init_dist))
             
-        model.add(TimeDistributedDense(num_output_vars, input_dim=macro_dims, 
-                                       activation=output_activation, init=init_dist))          
+        model.add(TimeDistributed(Dense(num_output_vars, input_dim=macro_dims, 
+                                       activation=output_activation, init=init_dist)))
     elif archtype == 'rnn4':
-        model.add(TDD(macro_dims, input_dim=num_input_vars, input_length=num_timesteps, 
-                                       activation='tanh', init=init_dist))
+        model.add(TDD(Dense(macro_dims, input_dim=num_input_vars, input_length=num_timesteps, 
+                                       activation='tanh', init=init_dist)))
             
         model.add(SimpleRNN(macro_dims, U_regularizer=regobj, input_dim=macro_dims, return_sequences=True, 
                                        input_length=num_timesteps, 
                                        activation=macro_activation, init=init_dist))
             
-        model.add(TimeDistributedDense(num_output_vars, input_dim=macro_dims, 
-                                       activation=output_activation, init=init_dist))   
+        model.add(TimeDistributed(Dense(num_output_vars, input_dim=macro_dims, 
+                                       activation=output_activation, init=init_dist)))
         
     elif archtype == 'rnn4_stacked':
         
-        model.add(TimeDistributedDense(1000, input_dim=num_input_vars, input_length=num_timesteps, activation='tanh', init=init_dist))
-        model.add(TDD(macro_dims, input_dim=1000, input_length=num_timesteps, 
-                                       activation='tanh', init=init_dist))
+        model.add(TimeDistributed(Dense(1000, input_dim=num_input_vars, input_length=num_timesteps, activation='tanh', init=init_dist)))
+        model.add(TDD(Dense(macro_dims, input_dim=1000, input_length=num_timesteps, 
+                                       activation='tanh', init=init_dist)))
             
         model.add(SimpleRNN(macro_dims, U_regularizer=regobj, input_dim=macro_dims, return_sequences=True, 
                                        input_length=num_timesteps, 
                                        activation=macro_activation, init=init_dist))
             
-        model.add(TimeDistributedDense(num_output_vars, input_dim=macro_dims, 
-                                       activation=output_activation, init=init_dist))    
+        model.add(TimeDistributed(Dense(num_output_vars, input_dim=macro_dims, 
+                                       activation=output_activation, init=init_dist)))
         
     else:
         raise Exception('Unknown RNN architecture %s'% archtype)
@@ -329,20 +329,20 @@ def get_rnn_model(num_timesteps, num_input_vars, num_output_vars, macro_dims=10,
         #model.add(Copy(input_dim=num_vars))
         model.add(PadZerosVector2(num_timesteps, input_shape=(num_vars,num_timesteps)))
         model.add(SimpleRNN(hidden_dims, return_sequences=True, input_length=num_timesteps, activation=activation))
-        model.add(TimeDistributedDense(num_vars, activation=output_activation))
+        model.add(TimeDistributed(Dense(num_vars, activation=output_activation)))
         #model.add(Activation('sigmoid'))
     elif False:
         model.add(Dense(hidden_dims, input_dim=num_vars, activation='tanh')) # , init='uniform', activation='sigmoid'))
         model.add(PadZerosVector(num_timesteps))
         model.add(SimpleRNN(hidden_dims, return_sequences=True, input_length=num_timesteps, activation='tanh'))
-        model.add(TimeDistributedDense(num_vars, activation=output_activation))
+        model.add(TimeDistributed(Dense(num_vars, activation=output_activation)))
         #model.add(Activation('sigmoid'))
     elif False:
         #activation = 'relu'
         activation = 'tanh'
-        model.add(TimeDistributedDense(hidden_dims, input_dim=num_vars, input_length=num_timesteps, activation=activation))
+        model.add(TimeDistributed(Dense(hidden_dims, input_dim=num_vars, input_length=num_timesteps, activation=activation)))
         model.add(SimpleRNN(hidden_dims, return_sequences=True, input_length=num_timesteps, activation=activation))
-        model.add(TimeDistributedDense(num_vars, activation=output_activation))
+        model.add(TimeDistributed(Dense(num_vars, activation=output_activation)))
         #model.add(Activation('sigmoid'))
     else:
     """
